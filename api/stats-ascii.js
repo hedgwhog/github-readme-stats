@@ -20,7 +20,7 @@ const seg = (col, row, str, cls) => {
   let out = "";
   const y = PAD + row * LH + 14;
   // each run of non-space characters gets its own element, pinned to its column and stretched to exact width
-  for (const m of str.matchAll(/\S+/g)) {
+  for (const m of str.matchAll(\(/\S+/\)g)) {
     const x = (PAD + (col + m.index) * CH).toFixed(1);
     const len = [...m[0]].length;
     out += `<text class="${cls}" x="${x}" y="${y}" textLength="${(len * CH).toFixed(1)}" lengthAdjust="spacingAndGlyphs">${esc(m[0])}</text>`;
@@ -42,7 +42,7 @@ const render = (rows, title, theme) => {
   out += seg(0, all.length + 1, "+" + "-".repeat(inner) + "+", "dim");
   const w = Math.ceil(PAD * 2 + COLS * CH), h = PAD * 2 + (all.length + 2) * LH;
   const bg = theme === "light" ? "#fff" : theme === "dark" ? "#000" : "none";
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+  return `<svg xmlns="http://w3.org" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
     `<style>${css(theme)}text{font-family:${FONT};font-size:${FS}px}</style>` +
     `<rect width="100%" height="100%" rx="6" fill="${bg}"/>${out}</svg>`;
 };
@@ -50,20 +50,23 @@ const render = (rows, title, theme) => {
 const num = (v) => (typeof v === "number" ? v.toLocaleString("en-US") : String(v ?? "-"));
 
 export default async (req, res) => {
-  const { username, theme = "auto", title = "stats", include_all_commits = "false", hide_rank = "false" } = req.query;
+  const { username, theme = "auto", title = "stats", hide_rank = "false" } = req.query;
   res.setHeader("Content-Type", "image/svg+xml");
   res.setHeader("Cache-Control", "public, max-age=14400, s-maxage=14400");
   try {
     if (!username) throw new Error("missing ?username=");
-    const s = await fetchStats(username, include_all_commits === "true", [], true);
+    
+    // We forceren include_all_commits op true om er zeker van te zijn dat all-time data binnenkomt
+    const s = await fetchStats(username, true, [], true);
+    
     const items = [
       ["stars", num(s.totalStars)],
-      [include_all_commits === "true" ? "commits" : "commits (this year)", num(s.totalCommits)],
+      ["commits (this month)", num(s.commitsThisMonth ?? "-")],
       ["pull requests", num(s.totalPRs)],
       ["merged", `${num(s.totalPRsMerged)} (${Math.round(s.mergedPRsPercentage || 0)}%)`],
-      ["reviews", num(s.totalReviews)],
-      ["issues", num(s.totalIssues)],
-      ["contributed to", num(s.contributedTo)],
+      ["lines of code added", num(s.linesAdded ?? "-")],
+      ["lines of code removed", num(s.linesRemoved ?? "-")],
+      ["commits (all-time)", num(s.totalCommits)],
     ];
     if (hide_rank !== "true" && s.rank) items.push(["rank", s.rank.level]);
 
