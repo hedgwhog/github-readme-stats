@@ -3,7 +3,7 @@
 // Usage: /api/top-langs-ascii?username=hedgwhog&langs_count=8
 // Optional: &dark=true (white on black), &hide=html,css, &exclude_repo=repo1,repo2
 
-import { fetchTopLanguages } from "../src/fetchers/top-languages-fetcher.js";
+import { fetchTopLanguages } from "../src/fetchers/top-languages.js";
 
 const esc = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
