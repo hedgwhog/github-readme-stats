@@ -109,7 +109,7 @@ export default async (req, res) => {
     const [s, x] = await Promise.all([fetchStats(username, true, [], true), fetchExtra(username)]);
 
     // GitHub computes line stats in the background the first time; retry soon if that's still happening
-    res.setHeader("Cache-Control", x.pending ? "public, max-age=60, s-maxage=60" : "public, max-age=14400, s-maxage=14400");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
     const items = [
       ["lines added", x.pending && !x.added ? "calculating..." : "+" + num(x.added)],
