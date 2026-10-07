@@ -80,9 +80,15 @@ const fetchExtra = async (username) => {
   await Promise.all(
     user.repositories.nodes.map(async ({ nameWithOwner }) => {
       try {
-        const res = await gh(`https://api.github.com/repos/${nameWithOwner}/stats/contributors`);
-        if (res.status === 202) { pending = true; return; } // GitHub is still calculating
-        if (!res.ok) return;
+        // GitHub answers 202 while it calculates the numbers in the background: wait a moment and ask again
+        let res;
+        for (let tryNo = 0; tryNo < 4; tryNo++) {
+          res = await gh(`https://api.github.com/repos/${nameWithOwner}/stats/contributors`);
+          if (res.status !== 202) break;
+          await new Promise((ok) => setTimeout(ok, 1500));
+        }
+        if (res.status === 202) { pending = true; return; }
+        if (!res.ok || res.status === 204) return; // 204 = empty repo
         const data = await res.json();
         const me = Array.isArray(data) && data.find((c) => c.author?.login?.toLowerCase() === username.toLowerCase());
         if (me) for (const w of me.weeks) { added += w.a; removed += w.d; }
@@ -111,8 +117,8 @@ export default async (req, res) => {
       ["commits (all time)", num(s.totalCommits)],
       ["pull requests", num(s.totalPRs)],
       ["merged", `${num(s.totalPRsMerged)} (${Math.round(s.mergedPRsPercentage || 0)}%)`],
-      ["lines added", "+" + num(x.added)],
-      ["lines removed", "-" + num(x.removed)],
+      ["lines added", x.pending && !x.added ? "calculating..." : "+" + num(x.added)],
+      ["lines removed", x.pending && !x.removed ? "calculating..." : "-" + num(x.removed)],
     ];
     if (hide_rank !== "true" && s.rank) items.push(["rank", s.rank.level]);
 
