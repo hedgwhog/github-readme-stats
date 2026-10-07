@@ -1,63 +1,78 @@
-// api/stats-ascii.js — minimal monochrome stats card
+// api/stats-ascii.js — ASCII stats card
 // /api/stats-ascii?username=NAME
-// Optional: &theme=auto|light|dark  &title=stats  &include_all_commits=true  &hide_rank=true
+// Optional: &theme=auto|light|dark  &title=stats|none  &include_all_commits=true  &hide_rank=true
 
 import { fetchStats } from "../src/fetchers/stats.js";
 
-const W = 400, PAD = 20, FS = 13, CH = 7.8;
-const ROWS_H = 8 * 26; // same height as an 8-language card, so they sit nicely side by side
+// ---------- shared ASCII renderer (same in stats-ascii.js) ----------
+const COLS = 50, CH = 8.4, LH = 20, PAD = 14, FS = 14;
 const FONT = "ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-const style = (theme) => {
-  const light = ".fg{fill:#1f2328}.mute{fill:#8c959f}.dot{stroke:#c4c9cf}";
-  const dark = ".fg{fill:#e6edf3}.mute{fill:#7d8590}.dot{stroke:#3d444d}";
-  if (theme === "light") return light.replace(/#1f2328/g, "#000");
-  if (theme === "dark") return dark.replace(/#e6edf3/g, "#fff");
-  return light + `@media (prefers-color-scheme:dark){${dark}}`;
+const css = (t) => {
+  const L = ".fg{fill:#1f2328}.mute{fill:#8c959f}.dim{fill:#c4c9cf}";
+  const D = ".fg{fill:#e6edf3}.mute{fill:#7d8590}.dim{fill:#3d444d}";
+  if (t === "light") return L.replace("#1f2328", "#000");
+  if (t === "dark") return D.replace("#e6edf3", "#fff");
+  return L + `@media (prefers-color-scheme:dark){${D}}`;
 };
-const bg = (theme) => (theme === "light" ? "#fff" : theme === "dark" ? "#000" : "none");
-
-const svg = (h, theme, body) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}" viewBox="0 0 ${W} ${h}">` +
-  `<style>${style(theme)}text{font-family:${FONT};font-size:${FS}px}</style>` +
-  `<rect width="100%" height="100%" rx="6" fill="${bg(theme)}"/>${body}</svg>`;
-
-const num = (v) => (typeof v === "number" ? v.toLocaleString("en-US") : String(v ?? "–"));
+// Every character is placed on a fixed grid, so the box always lines up, whatever font GitHub uses.
+const seg = (col, row, str, cls) => {
+  let out = "";
+  const y = PAD + row * LH + 14;
+  // each run of non-space characters gets its own element, pinned to its column and stretched to exact width
+  for (const m of str.matchAll(/\S+/g)) {
+    const x = (PAD + (col + m.index) * CH).toFixed(1);
+    const len = [...m[0]].length;
+    out += `<text class="${cls}" x="${x}" y="${y}" textLength="${(len * CH).toFixed(1)}" lengthAdjust="spacingAndGlyphs">${esc(m[0])}</text>`;
+  }
+  return out;
+};
+// rows: array of arrays of [text, class]; wrapped in a +---+ box
+const render = (rows, title, theme) => {
+  const inner = COLS - 2;
+  const t = title && title !== "none" ? `- ${title} ` : "";
+  let out = seg(0, 0, "+-" + " ".repeat(Math.max(0, t.length - 1)) + "-".repeat(inner - t.length) + "+", "dim");
+  if (t) out += seg(3, 0, title, "mute");
+  const all = [[], ...rows, []];
+  all.forEach((parts, r) => {
+    out += seg(0, r + 1, "|", "dim") + seg(COLS - 1, r + 1, "|", "dim");
+    let c = 1;
+    for (const [txt, cls] of parts) { out += seg(c, r + 1, txt, cls); c += [...txt].length; }
+  });
+  out += seg(0, all.length + 1, "+" + "-".repeat(inner) + "+", "dim");
+  const w = Math.ceil(PAD * 2 + COLS * CH), h = PAD * 2 + (all.length + 2) * LH;
+  const bg = theme === "light" ? "#fff" : theme === "dark" ? "#000" : "none";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+    `<style>${css(theme)}text{font-family:${FONT};font-size:${FS}px}</style>` +
+    `<rect width="100%" height="100%" rx="6" fill="${bg}"/>${out}</svg>`;
+};
+// -------------------------------------------------------------------
+const num = (v) => (typeof v === "number" ? v.toLocaleString("en-US") : String(v ?? "-"));
 
 export default async (req, res) => {
-  const { username, theme = "auto", title = "", include_all_commits = "false", hide_rank = "false" } = req.query;
+  const { username, theme = "auto", title = "stats", include_all_commits = "false", hide_rank = "false" } = req.query;
   res.setHeader("Content-Type", "image/svg+xml");
   res.setHeader("Cache-Control", "public, max-age=14400, s-maxage=14400");
-
   try {
     if (!username) throw new Error("missing ?username=");
     const s = await fetchStats(username, include_all_commits === "true", [], true);
-
-    const rows = [
+    const items = [
       ["stars", num(s.totalStars)],
-      [include_all_commits === "true" ? "commits" : "commits (year)", num(s.totalCommits)],
+      [include_all_commits === "true" ? "commits" : "commits (this year)", num(s.totalCommits)],
       ["pull requests", num(s.totalPRs)],
       ["merged", `${num(s.totalPRsMerged)} (${Math.round(s.mergedPRsPercentage || 0)}%)`],
+      ["reviews", num(s.totalReviews)],
       ["issues", num(s.totalIssues)],
       ["contributed to", num(s.contributedTo)],
     ];
-    if (hide_rank !== "true" && s.rank) rows.push(["rank", s.rank.level]);
+    if (hide_rank !== "true" && s.rank) items.push(["rank", s.rank.level]);
 
-    const ROW = ROWS_H / rows.length;
-    const top = title ? PAD + 30 : PAD;
-    let body = title ? `<text class="mute" x="${PAD}" y="${PAD + 12}">${esc(title)}</text>` : "";
-    rows.forEach(([label, value], i) => {
-      const y = top + i * ROW + 14;
-      const x1 = PAD + label.length * CH + 10;
-      const x2 = W - PAD - value.length * CH - 10;
-      body += `<text class="mute" x="${PAD}" y="${y}">${esc(label)}</text>`;
-      if (x2 > x1) body += `<line class="dot" x1="${x1}" y1="${y - 4}" x2="${x2}" y2="${y - 4}" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="0 6"/>`;
-      body += `<text class="fg" x="${W - PAD}" y="${y}" text-anchor="end" xml:space="preserve">${esc(value)}</text>`;
+    const rows = items.map(([label, value]) => {
+      const dots = COLS - 2 - (1 + label.length + 1 + 1 + value.length + 1);
+      return [[" " + label + " ", "mute"], [".".repeat(Math.max(1, dots)), "dim"], [" " + value, "fg"]];
     });
-
-    res.send(svg(top + ROWS_H + PAD - 6, theme, body));
+    res.send(render(rows, title, theme));
   } catch (err) {
-    res.send(svg(56, theme, `<text class="mute" x="${PAD}" y="33">error: ${esc(err.message)}</text>`));
+    res.send(render([[[" error: " + err.message.slice(0, 40), "mute"]]], "error", theme));
   }
 };
