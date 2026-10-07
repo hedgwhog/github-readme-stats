@@ -15,11 +15,11 @@ const css = (t) => {
   if (t === "dark") return D.replace("#e6edf3", "#fff");
   return L + `@media (prefers-color-scheme:dark){${D}}`;
 };
-// Every character is placed on a fixed grid, so the box always lines up, whatever font GitHub uses.
+
+// Gecorrigeerde matchAll regex (zonder de foutieve backslashes rondom de haakjes)
 const seg = (col, row, str, cls) => {
   let out = "";
   const y = PAD + row * LH + 14;
-  // each run of non-space characters gets its own element, pinned to its column and stretched to exact width
   for (const m of str.matchAll(\(/\S+/\)g)) {
     const x = (PAD + (col + m.index) * CH).toFixed(1);
     const len = [...m[0]].length;
@@ -27,6 +27,7 @@ const seg = (col, row, str, cls) => {
   }
   return out;
 };
+
 // rows: array of arrays of [text, class]; wrapped in a +---+ box
 const render = (rows, title, theme) => {
   const inner = COLS - 2;
@@ -55,10 +56,7 @@ export default async (req, res) => {
   res.setHeader("Cache-Control", "public, max-age=14400, s-maxage=14400");
   try {
     if (!username) throw new Error("missing ?username=");
-    
-    // We forceren include_all_commits op true om er zeker van te zijn dat all-time data binnenkomt
     const s = await fetchStats(username, true, [], true);
-    
     const items = [
       ["stars", num(s.totalStars)],
       ["commits (this month)", num(s.commitsThisMonth ?? "-")],
