@@ -112,13 +112,13 @@ export default async (req, res) => {
     res.setHeader("Cache-Control", x.pending ? "public, max-age=60, s-maxage=60" : "public, max-age=14400, s-maxage=14400");
 
     const items = [
-      ["stars", num(s.totalStars)],
+      ["lines added", x.pending && !x.added ? "calculating..." : "+" + num(x.added)],
+      ["lines removed", x.pending && !x.removed ? "calculating..." : "-" + num(x.removed)],
       ["commits (this month)", num(x.commitsThisMonth)],
       ["commits (all time)", num(s.totalCommits)],
       ["pull requests", num(s.totalPRs)],
       ["merged", `${num(s.totalPRsMerged)} (${Math.round(s.mergedPRsPercentage || 0)}%)`],
-      ["lines added", x.pending && !x.added ? "calculating..." : "+" + num(x.added)],
-      ["lines removed", x.pending && !x.removed ? "calculating..." : "-" + num(x.removed)],
+      ["stars", num(s.totalStars)],
     ];
     if (hide_rank !== "true" && s.rank) items.push(["rank", s.rank.level]);
 
