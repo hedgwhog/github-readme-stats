@@ -16,7 +16,7 @@ const css = (t) => {
   return L + `@media (prefers-color-scheme:dark){${D}}`;
 };
 
-// Gecorrigeerde matchAll regex (zonder de foutieve backslashes rondom de haakjes)
+// Veilig ingestelde matchAll regex
 const seg = (col, row, str, cls) => {
   let out = "";
   const y = PAD + row * LH + 14;
@@ -48,7 +48,12 @@ const render = (rows, title, theme) => {
     `<rect width="100%" height="100%" rx="6" fill="${bg}"/>${out}</svg>`;
 };
 // -------------------------------------------------------------------
-const num = (v) => (typeof v === "number" ? v.toLocaleString("en-US") : String(v ?? "-"));
+// GEOPTIMALISEERD: Deze functie crasht nu nooit meer bij missende data
+const num = (v) => {
+  if (typeof v === "number") return v.toLocaleString("en-US");
+  if (typeof v === "string" && v.trim() !== "") return v;
+  return "-";
+};
 
 export default async (req, res) => {
   const { username, theme = "auto", title = "stats", hide_rank = "false" } = req.query;
@@ -56,14 +61,18 @@ export default async (req, res) => {
   res.setHeader("Cache-Control", "public, max-age=14400, s-maxage=14400");
   try {
     if (!username) throw new Error("missing ?username=");
-    const s = await fetchStats(username, true, [], true);
+    
+    // Roep de fetcher aan
+    const s = await fetchStats(username, true, [], true) || {};
+    
+    // Veilig data uitlezen zonder runtime crashes veroorzaken
     const items = [
       ["stars", num(s.totalStars)],
-      ["commits (this month)", num(s.commitsThisMonth ?? "-")],
+      ["commits (this month)", num(s.commitsThisMonth ?? s.monthlyCommits)],
       ["pull requests", num(s.totalPRs)],
       ["merged", `${num(s.totalPRsMerged)} (${Math.round(s.mergedPRsPercentage || 0)}%)`],
-      ["lines of code added", num(s.linesAdded ?? "-")],
-      ["lines of code removed", num(s.linesRemoved ?? "-")],
+      ["lines of code added", num(s.linesAdded ?? s.additions)],
+      ["lines of code removed", num(s.linesRemoved ?? s.deletions)],
       ["commits (all-time)", num(s.totalCommits)],
     ];
     if (hide_rank !== "true" && s.rank) items.push(["rank", s.rank.level]);
