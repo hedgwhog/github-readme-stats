@@ -9,12 +9,9 @@ const COLS = 50, CH = 8.4, LH = 20, PAD = 14, FS = 14;
 const FONT = "ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const css = (t) => {
-  const L = ".fg{fill:#1f2328}.mute{fill:#8c959f}.dim{fill:#c4c9cf}";
-  const D = ".fg{fill:#e6edf3}.mute{fill:#7d8590}.dim{fill:#3d444d}";
-  if (t === "light") return L.replace("#1f2328", "#000");
-  if (t === "dark") return D.replace("#e6edf3", "#fff");
-  return L + `@media (prefers-color-scheme:dark){${D}}`;
+  return "text, .fg, .mute, .dim { fill: #fff !important; }";
 };
+
 // Every character is placed on a fixed grid, so the box always lines up, whatever font GitHub uses.
 const seg = (col, row, str, cls) => {
   let out = "";
