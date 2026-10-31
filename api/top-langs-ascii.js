@@ -8,8 +8,15 @@ import { fetchTopLanguages } from "../src/fetchers/top-languages.js";
 const COLS = 50, CH = 8.4, LH = 20, PAD = 14, FS = 14;
 const FONT = "ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// colors follow the theme: light = dark text, dark = light text, auto = follows the viewer's color scheme
 const css = (t) => {
-  return "text, .fg, .mute, .dim { fill: #fff !important; }";
+  const L = { fg: "#1f2328", mute: "#59636e", dim: "#8c959f" };
+  const D = { fg: "#f0f6fc", mute: "#9198a1", dim: "#656c76" };
+  const rule = (c) => `.fg{fill:${c.fg}}.mute{fill:${c.mute}}.dim{fill:${c.dim}}`;
+  if (t === "light") return rule(L);
+  if (t === "dark") return rule(D);
+  return rule(L) + `@media (prefers-color-scheme: dark){${rule(D)}}`;
 };
 
 // Every character is placed on a fixed grid, so the box always lines up, whatever font GitHub uses.
@@ -48,7 +55,6 @@ const render = (rows, title, theme) => {
 export default async (req, res) => {
   const { username, langs_count = "8", hide = "", exclude_repo = "", theme = "auto", title = "languages" } = req.query;
   res.setHeader("Content-Type", "image/svg+xml");
-  res.setHeader("Cache-Control", "public, max-age=14400, s-maxage=14400");
   try {
     if (!username) throw new Error("missing ?username=");
     const langs = await fetchTopLanguages(username, exclude_repo ? exclude_repo.split(",") : []);
@@ -71,8 +77,11 @@ export default async (req, res) => {
         [" " + ((share * 100).toFixed(1) + "%").padStart(5), "mute"],
       ];
     });
+    // only cache successful results (errors must not stick for 4 hours)
+    res.setHeader("Cache-Control", "public, max-age=14400, s-maxage=14400");
     res.send(render(rows, title, theme));
   } catch (err) {
-    res.send(render([[[" error: " + err.message.slice(0, 40), "mute"]]], "error", theme));
+    res.setHeader("Cache-Control", "no-store");
+    res.send(render([[[" error: " + String(err.message).slice(0, 40), "mute"]]], "error", theme));
   }
 };
