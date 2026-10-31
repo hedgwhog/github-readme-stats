@@ -8,13 +8,22 @@ import { fetchStats } from "../src/fetchers/stats.js";
 const COLS = 50, CH = 8.4, LH = 20, PAD = 14, FS = 14;
 const FONT = "ui-monospace,SFMono-Regular,Menlo,Consolas,'DejaVu Sans Mono','Liberation Mono',monospace";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// colors follow the theme: light = dark text, dark = light text, auto = follows the viewer's color scheme
 const css = (t) => {
-  return "text, .fg, .mute, .dim { fill: #fff !important; }";
+  const L = { fg: "#1f2328", mute: "#59636e", dim: "#8c959f" };
+  const D = { fg: "#f0f6fc", mute: "#9198a1", dim: "#656c76" };
+  const rule = (c) => `.fg{fill:${c.fg}}.mute{fill:${c.mute}}.dim{fill:${c.dim}}`;
+  if (t === "light") return rule(L);
+  if (t === "dark") return rule(D);
+  return rule(L) + `@media (prefers-color-scheme: dark){${rule(D)}}`;
 };
 
+// Every character is placed on a fixed grid, so the box always lines up, whatever font GitHub uses.
 const seg = (col, row, str, cls) => {
   let out = "";
   const y = PAD + row * LH + 14;
+  // each run of non-space characters gets its own element, pinned to its column and stretched to exact width
   for (const m of str.matchAll(/\S+/g)) {
     const x = (PAD + (col + m.index) * CH).toFixed(1);
     const len = [...m[0]].length;
@@ -22,6 +31,7 @@ const seg = (col, row, str, cls) => {
   }
   return out;
 };
+// rows: array of arrays of [text, class]; wrapped in a +---+ box
 const render = (rows, title, theme) => {
   const inner = COLS - 2;
   const t = title && title !== "none" ? `- ${title} ` : "";
@@ -43,6 +53,10 @@ const render = (rows, title, theme) => {
 // -------------------------------------------------------------------------
 
 const num = (v) => (typeof v === "number" && !Number.isNaN(v) ? v.toLocaleString("en-US") : "-");
+
+// resolves with `fallback` if the promise takes longer than `ms`
+const withDeadline = (p, ms, fallback) =>
+  Promise.race([p, new Promise((ok) => setTimeout(() => ok(fallback), ms))]);
 
 // ---------- extra stats that the original project doesn't provide ----------
 const gh = (url, opts = {}) =>
@@ -79,7 +93,7 @@ const fetchExtra = async (username) => {
       try {
         // GitHub answers 202 while it calculates the numbers in the background: wait a moment and ask again
         let res;
-        for (let tryNo = 0; tryNo < 4; tryNo++) {
+        for (let tryNo = 0; tryNo < 2; tryNo++) {
           res = await gh(`https://api.github.com/repos/${nameWithOwner}/stats/contributors`);
           if (res.status !== 202) break;
           await new Promise((ok) => setTimeout(ok, 1500));
@@ -103,7 +117,11 @@ export default async (req, res) => {
   try {
     if (!username) throw new Error("missing ?username=");
 
-    const [s, x] = await Promise.all([fetchStats(username, true, [], true), fetchExtra(username)]);
+    // the extra stats get a 7s budget; if they're too slow we show "calculating..." and retry soon
+    const [s, x] = await Promise.all([
+      fetchStats(username, true, [], true),
+      withDeadline(fetchExtra(username), 7000, { commitsThisMonth: 0, added: 0, removed: 0, pending: true }),
+    ]);
 
     // GitHub computes line stats in the background the first time; retry soon if that's still happening
     res.setHeader("Cache-Control", x.pending ? "public, max-age=60, s-maxage=60" : "public, max-age=14400, s-maxage=14400");
@@ -111,7 +129,7 @@ export default async (req, res) => {
     const items = [
       ["lines added", x.pending && !x.added ? "calculating..." : "+" + num(x.added)],
       ["lines removed", x.pending && !x.removed ? "calculating..." : "-" + num(x.removed)],
-      ["commits (this month)", num(x.commitsThisMonth)],
+      ["commits (this month)", x.pending && !x.commitsThisMonth ? "calculating..." : num(x.commitsThisMonth)],
       ["commits (all time)", num(s.totalCommits)],
       ["pull requests", num(s.totalPRs)],
       ["merged", `${num(s.totalPRsMerged)} (${Math.round(s.mergedPRsPercentage || 0)}%)`],
