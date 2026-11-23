@@ -53,7 +53,7 @@ const render = (rows, title, theme) => {
 // --------------------------------------------------------------------
 
 export default async (req, res) => {
-  const { username, langs_count = "8", hide = "", exclude_repo = "", theme = "auto", title = "languages" } = req.query;
+  const { username, langs_count = "12", hide = "", exclude_repo = "", theme = "auto", title = "languages" } = req.query;
   res.setHeader("Content-Type", "image/svg+xml");
   try {
     if (!username) throw new Error("missing ?username=");
